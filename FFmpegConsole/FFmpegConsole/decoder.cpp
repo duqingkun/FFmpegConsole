@@ -6,6 +6,8 @@ extern "C"
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavutil/avutil.h>
+#include <libavutil/imgutils.h>
+#include <libswscale/swscale.h>
 }
 
 void Decoder::decode(const char *filename, const char *out_video, const char *out_audio)
@@ -16,20 +18,23 @@ void Decoder::decode(const char *filename, const char *out_video, const char *ou
 	{
 		return;
 	}
+	av_dump_format(context.fmt_ctx, 0, filename, 0);
 
 	FILE *fVideo = nullptr;
 	FILE *fAudio = nullptr;
 	if(context.hasVideo && out_video != nullptr)
 	{
-		fopen_s(&fVideo, out_video, "wb");
+		fopen_s(&fVideo, out_video, "wb+");
+		context.sws_ctx = sws_getContext(context.v_codec_ctx->width, context.v_codec_ctx->height,
+			context.v_codec_ctx->pix_fmt, context.v_codec_ctx->width, context.v_codec_ctx->height,
+			AV_PIX_FMT_YUV420P, SWS_BICUBIC, nullptr, nullptr, nullptr);
+		context.v_frm = av_frame_alloc();
 	}
 
 	if (context.hasAudio && out_audio != nullptr)
 	{
-		fopen_s(&fAudio, out_audio, "wb");
+		fopen_s(&fAudio, out_audio, "wb+");
 	}
-
-	av_dump_format(context.fmt_ctx, 0, filename, 0);
 
 	AVPacket pkt;
 	av_init_packet(&pkt);
@@ -44,6 +49,7 @@ void Decoder::decode(const char *filename, const char *out_video, const char *ou
 	pkt.size = 0;
 	decode_packet(&context, &pkt, fAudio, fVideo);
 
+	if(context.v_frm != nullptr) av_frame_free(&context.v_frm);
 	close(&context);
 	if (fAudio != nullptr) fclose(fAudio);
 	if (fVideo != nullptr) fclose(fVideo);
@@ -161,6 +167,7 @@ void Decoder::decode_packet(Context *ctx, AVPacket *pkt, FILE *fAudio, FILE *fVi
 		{
 			return;
 		}
+		
 		while (ret >= 0)
 		{
 			ret = avcodec_receive_frame(ctx->v_codec_ctx, frm);
@@ -168,16 +175,41 @@ void Decoder::decode_packet(Context *ctx, AVPacket *pkt, FILE *fAudio, FILE *fVi
 			{
 				break;
 			}
+			
 			double timestamp = frm->pts * av_q2d(ctx->fmt_ctx->streams[ctx->v_index]->time_base);
 			//std::cout << YELLOW << "Video timestamp: " << timestamp << "s" << std::endl;
 			if(fVideo != nullptr)
 			{
-				int ySize = ctx->v_codec_ctx->width * ctx->v_codec_ctx->height;
-				int uSize = ySize / 4;
-				int vSize = ySize / 4;
-				fwrite(frm->data[0], 1, ySize, fVideo);
-				fwrite(frm->data[1], 1, uSize, fVideo);
-				fwrite(frm->data[2], 1, vSize, fVideo);
+				if(ctx->sws_ctx != nullptr)
+				{
+					//为yuv420p_frm中的data,linesize指针分配空间
+					if(ctx->v_frm->data[0] == nullptr)
+					{
+						ret = av_image_alloc(ctx->v_frm->data, ctx->v_frm->linesize,
+							ctx->v_codec_ctx->width, ctx->v_codec_ctx->height, AV_PIX_FMT_YUV420P, 1);
+					}
+
+					//转换
+					ret = sws_scale(ctx->sws_ctx, frm->data, frm->linesize, 0, ctx->v_codec_ctx->height,
+						ctx->v_frm->data, ctx->v_frm->linesize);
+
+					int ySize = ctx->v_codec_ctx->width * ctx->v_codec_ctx->height;
+					int uSize = ySize / 4;
+					int vSize = ySize / 4;
+					fwrite(ctx->v_frm->data[0], 1, ySize, fVideo);
+					fwrite(ctx->v_frm->data[1], 1, uSize, fVideo);
+					fwrite(ctx->v_frm->data[2], 1, vSize, fVideo);
+				}
+				else
+				{
+					//不做转换，则可能会有填充得空白数据，比如688*384的视频会填充成768*384，data中每行结尾都有无效数据
+					int ySize = frm->linesize[0] * ctx->v_codec_ctx->height;// ctx->v_codec_ctx->width * ctx->v_codec_ctx->height;
+					int uSize = ySize / 4;
+					int vSize = ySize / 4;
+					fwrite(frm->data[0], 1, ySize, fVideo);
+					fwrite(frm->data[1], 1, uSize, fVideo);
+					fwrite(frm->data[2], 1, vSize, fVideo);
+				}
 			}
 		}
 	}

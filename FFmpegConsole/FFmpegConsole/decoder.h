@@ -24,6 +24,8 @@ class AVFormatContext;
 class AVCodec;
 class AVCodecContext;
 class AVPacket;
+class SwsContext;
+class AVFrame;
 
 typedef struct _Context
 {
@@ -32,6 +34,8 @@ typedef struct _Context
 	AVCodec *v_codec;
 	AVCodecContext *a_codec_ctx;
 	AVCodecContext *v_codec_ctx;
+	SwsContext *sws_ctx;
+	AVFrame *v_frm;
 	int a_index;
 	int v_index;
 	bool hasAudio;
