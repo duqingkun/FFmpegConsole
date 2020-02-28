@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdio>
+
 #define RESET   "\033[0m"
 #define BLACK   "\033[30m"      /* Black */
 #define RED     "\033[31m"      /* Red */
@@ -39,10 +41,10 @@ typedef struct _Context
 class Decoder
 {
 public:
-	static void decode(const char *filename);
+	static void decode(const char *filename, const char *out_video = nullptr, const char *out_audio = nullptr);
 private:
 	static bool open_input(Context *ctx, const char *filename);
 	static void close(Context *ctx);
-	static void decode_packet(Context *ctx, AVPacket *pkt);
+	static void decode_packet(Context *ctx, AVPacket *pkt, FILE *fAudio, FILE *fVideo);
 };
 

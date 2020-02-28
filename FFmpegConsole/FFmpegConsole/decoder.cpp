@@ -8,13 +8,25 @@ extern "C"
 #include <libavutil/avutil.h>
 }
 
-void Decoder::decode(const char *filename)
+void Decoder::decode(const char *filename, const char *out_video, const char *out_audio)
 {
 	Context context;
 	memset(&context, 0, sizeof(Context));
 	if(!open_input(&context, filename))
 	{
 		return;
+	}
+
+	FILE *fVideo = nullptr;
+	FILE *fAudio = nullptr;
+	if(context.hasVideo && out_video != nullptr)
+	{
+		fopen_s(&fVideo, out_video, "wb");
+	}
+
+	if (context.hasAudio && out_audio != nullptr)
+	{
+		fopen_s(&fAudio, out_audio, "wb");
 	}
 
 	av_dump_format(context.fmt_ctx, 0, filename, 0);
@@ -24,15 +36,17 @@ void Decoder::decode(const char *filename)
 
 	while (av_read_frame(context.fmt_ctx, &pkt) >= 0)
 	{
-		decode_packet(&context, &pkt);
+		decode_packet(&context, &pkt, fAudio, fVideo);
 	}
 
 	//flush decoder
 	pkt.data = nullptr;
 	pkt.size = 0;
-	decode_packet(&context, &pkt);
+	decode_packet(&context, &pkt, fAudio, fVideo);
 
 	close(&context);
+	if (fAudio != nullptr) fclose(fAudio);
+	if (fVideo != nullptr) fclose(fVideo);
 }
 
 bool Decoder::open_input(Context *ctx, const char *filename)
@@ -105,7 +119,7 @@ void Decoder::close(Context *ctx)
 	avformat_close_input(&ctx->fmt_ctx);
 }
 
-void Decoder::decode_packet(Context *ctx, AVPacket *pkt)
+void Decoder::decode_packet(Context *ctx, AVPacket *pkt, FILE *fAudio, FILE *fVideo)
 {
 	AVFrame *frm = av_frame_alloc();
 	int ret = -1;
@@ -125,15 +139,18 @@ void Decoder::decode_packet(Context *ctx, AVPacket *pkt)
 			}
 
 			double timestamp = frm->pts * av_q2d(ctx->a_codec_ctx->time_base);
-			std::cout << CYAN << "Audio timestamp: " << timestamp << "s" << std::endl;
+			//std::cout << CYAN << "Audio timestamp: " << timestamp << "s" << std::endl;
 			int data_size = av_get_bytes_per_sample(ctx->a_codec_ctx->sample_fmt);
 			if(data_size < 0)
 			{
 				break;
 			}
-			//for (int i = 0; i < frm->nb_samples; i++)
-			//	for (int ch = 0; ch < ctx->a_codec_ctx->channels; ch++)
-			//		fwrite(frm->data[ch] + data_size * i, 1, data_size, outfile);
+			if(fAudio != nullptr)
+			{
+				for (int i = 0; i < frm->nb_samples; i++)
+					for (int ch = 0; ch < ctx->a_codec_ctx->channels; ch++)
+						fwrite(frm->data[ch] + data_size * i, 1, data_size, fAudio);
+			}
 		}
 		
 	}
@@ -152,7 +169,16 @@ void Decoder::decode_packet(Context *ctx, AVPacket *pkt)
 				break;
 			}
 			double timestamp = frm->pts * av_q2d(ctx->fmt_ctx->streams[ctx->v_index]->time_base);
-			std::cout << YELLOW << "Video timestamp: " << timestamp << "s" << std::endl;
+			//std::cout << YELLOW << "Video timestamp: " << timestamp << "s" << std::endl;
+			if(fVideo != nullptr)
+			{
+				int ySize = ctx->v_codec_ctx->width * ctx->v_codec_ctx->height;
+				int uSize = ySize / 4;
+				int vSize = ySize / 4;
+				fwrite(frm->data[0], 1, ySize, fVideo);
+				fwrite(frm->data[1], 1, uSize, fVideo);
+				fwrite(frm->data[2], 1, vSize, fVideo);
+			}
 		}
 	}
 }
