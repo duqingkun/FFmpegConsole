@@ -9,8 +9,8 @@ extern "C"
 int main()
 {
 	Param p;
-	p.video.width = 640;
-	p.video.height = 480;
+	p.video.width = Default;
+	p.video.height = Default;
 	p.video.fmt = AV_PIX_FMT_YUV420P;
 
 	p.audio.ch_layout = AV_CH_LAYOUT_MONO;

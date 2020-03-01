@@ -26,6 +26,8 @@ extern "C"
 #define BOLDCYAN    "\033[1m\033[36m"      /* Bold Cyan */
 #define BOLDWHITE   "\033[1m\033[37m"      /* Bold White */
 
+#define Default -1
+
 class AVFormatContext;
 class AVCodec;
 class AVCodecContext;

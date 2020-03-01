@@ -248,7 +248,7 @@ void Decoder::decode_packet(Context *ctx, AVPacket *pkt, FILE *fAudio, FILE *fVi
 			}
 			
 			double timestamp = frm->pts * av_q2d(ctx->fmt_ctx->streams[ctx->v_index]->time_base);
-			//std::cout << YELLOW << "Video timestamp: " << timestamp << "s" << std::endl;
+			std::cout << YELLOW << "Video timestamp: " << timestamp << "s" << std::endl;
 			if(fVideo != nullptr)
 			{
 				if(ctx->sws_ctx != nullptr)
