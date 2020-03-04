@@ -59,7 +59,7 @@ void Decoder::decode(const char *filename, const char *out_video, const char *ou
 			if(param->audio.fmt >= 0) p.audio.fmt = param->audio.fmt;
 		}
 
-		p.audio.__nb_channels = av_get_channel_layout_nb_channels(param->audio.ch_layout);
+		p.audio.__nb_channels = av_get_channel_layout_nb_channels(context.a_codec_ctx->channel_layout);
 		
 		context.swr_ctx = swr_alloc();
 		av_opt_set_int(context.swr_ctx, "in_channel_layout", context.a_codec_ctx->channel_layout, 0);
@@ -185,13 +185,14 @@ void Decoder::decode_packet(Context *ctx, AVPacket *pkt, FILE *fAudio, FILE *fVi
 
 			double timestamp = frm->pts * av_q2d(ctx->a_codec_ctx->time_base);
 			//std::cout << CYAN << "Audio timestamp: " << timestamp << "s" << std::endl;
-			int data_size = av_get_bytes_per_sample(ctx->a_codec_ctx->sample_fmt);
+			int data_size = av_get_bytes_per_sample(param->audio.fmt);
 			if(data_size < 0)
 			{
 				break;
 			}
 			if(fAudio != nullptr)
 			{
+				//ctx->swr_ctx = nullptr;
 				if(ctx->swr_ctx != nullptr)
 				{
 					if (ctx->a_frm->data[0] == nullptr)
@@ -214,12 +215,14 @@ void Decoder::decode_packet(Context *ctx, AVPacket *pkt, FILE *fAudio, FILE *fVi
 					{
 						break;
 					}
-					int dst_bufsize = av_samples_get_buffer_size(ctx->a_frm->linesize, param->audio.__nb_channels, ret, param->audio.fmt, 1);
+					/*int dst_bufsize = av_samples_get_buffer_size(ctx->a_frm->linesize, param->audio.__nb_channels, ret, param->audio.fmt, 1);
 					if (dst_bufsize < 0) 
 					{
 						break;
-					}
-					fwrite(ctx->a_frm->data[0], 1, dst_bufsize, fAudio);
+					}*/
+					for (int i = 0; i < frm->nb_samples; i++)
+						for (int ch = 0; ch < ctx->a_codec_ctx->channels; ch++)
+							fwrite(frm->data[ch] + data_size * i, 1, data_size, fAudio);
 				}
 				else
 				{
@@ -248,7 +251,7 @@ void Decoder::decode_packet(Context *ctx, AVPacket *pkt, FILE *fAudio, FILE *fVi
 			}
 			
 			double timestamp = frm->pts * av_q2d(ctx->fmt_ctx->streams[ctx->v_index]->time_base);
-			std::cout << YELLOW << "Video timestamp: " << timestamp << "s" << std::endl;
+			//std::cout << YELLOW << "Video timestamp: " << timestamp << "s" << std::endl;
 			if(fVideo != nullptr)
 			{
 				if(ctx->sws_ctx != nullptr)
