@@ -45,6 +45,7 @@ typedef struct _AudioParam
 	//private
 	int __nb_channels;
 	int __nb_samples;
+	int __src_nb_samples;
 	
 }AudioParam;
 

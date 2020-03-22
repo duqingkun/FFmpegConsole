@@ -59,7 +59,9 @@ void Decoder::decode(const char *filename, const char *out_video, const char *ou
 			if(param->audio.fmt >= 0) p.audio.fmt = param->audio.fmt;
 		}
 
-		p.audio.__nb_channels = av_get_channel_layout_nb_channels(context.a_codec_ctx->channel_layout);
+		p.audio.__src_nb_samples = 0;
+		p.audio.__nb_samples = 0;
+		p.audio.__nb_channels = av_get_channel_layout_nb_channels(p.audio.ch_layout);
 		
 		context.swr_ctx = swr_alloc();
 		av_opt_set_int(context.swr_ctx, "in_channel_layout", context.a_codec_ctx->channel_layout, 0);
@@ -166,7 +168,7 @@ void Decoder::close(Context *ctx)
 
 void Decoder::decode_packet(Context *ctx, AVPacket *pkt, FILE *fAudio, FILE *fVideo, Param *param)
 {
-	AVFrame *frm = av_frame_alloc();
+	AVFrame *frm = av_frame_alloc(); //存储解码后转换前的数据
 	int ret = -1;
 	if(pkt->stream_index == ctx->a_index) //音频
 	{
@@ -184,7 +186,7 @@ void Decoder::decode_packet(Context *ctx, AVPacket *pkt, FILE *fAudio, FILE *fVi
 			}
 
 			double timestamp = frm->pts * av_q2d(ctx->a_codec_ctx->time_base);
-			//std::cout << CYAN << "Audio timestamp: " << timestamp << "s" << std::endl;
+			std::cout << CYAN << "Audio timestamp: " << timestamp << "s" << std::endl;
 			int data_size = av_get_bytes_per_sample(param->audio.fmt);
 			if(data_size < 0)
 			{
@@ -195,8 +197,9 @@ void Decoder::decode_packet(Context *ctx, AVPacket *pkt, FILE *fAudio, FILE *fVi
 				//ctx->swr_ctx = nullptr;
 				if(ctx->swr_ctx != nullptr)
 				{
-					if (ctx->a_frm->data[0] == nullptr)
+					if (frm->nb_samples != param->audio.__src_nb_samples)
 					{
+						param->audio.__src_nb_samples = frm->nb_samples;
 						int dst_nb_samples = av_rescale_rnd(swr_get_delay(ctx->swr_ctx, ctx->a_codec_ctx->sample_rate) + frm->nb_samples, 
 							param->audio.rate, ctx->a_codec_ctx->sample_rate, AV_ROUND_UP);
 						if(dst_nb_samples > param->audio.__nb_samples)
@@ -215,14 +218,10 @@ void Decoder::decode_packet(Context *ctx, AVPacket *pkt, FILE *fAudio, FILE *fVi
 					{
 						break;
 					}
-					/*int dst_bufsize = av_samples_get_buffer_size(ctx->a_frm->linesize, param->audio.__nb_channels, ret, param->audio.fmt, 1);
-					if (dst_bufsize < 0) 
-					{
-						break;
-					}*/
-					for (int i = 0; i < frm->nb_samples; i++)
-						for (int ch = 0; ch < ctx->a_codec_ctx->channels; ch++)
-							fwrite(frm->data[ch] + data_size * i, 1, data_size, fAudio);
+					
+					for (int i = 0; i < ret; i++)
+						for (int ch = 0; ch < param->audio.__nb_channels; ch++)
+							fwrite(ctx->a_frm->data[ch] + data_size * i, 1, data_size, fAudio);
 				}
 				else
 				{
